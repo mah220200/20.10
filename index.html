@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Interactive Hand-Controlled Galaxy</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #10000d;
+            font-family: 'Inter', sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 16px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: opacity 0.5s ease;
+        }
+
+        #camera-frame {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: min(240px, 30vw);
+            aspect-ratio: 4 / 3;
+            overflow: hidden;
+            border: 1px solid rgba(220, 170, 255, 0.65);
+            border-radius: 14px;
+            background: rgba(16, 0, 13, 0.85);
+            box-shadow: 0 0 24px rgba(157, 40, 255, 0.28);
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .input_video {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+
+        #camera-label {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 7px 10px;
+            color: #fff;
+            background: linear-gradient(transparent, rgba(16, 0, 13, 0.85));
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        #wish-popup {
+            position: absolute;
+            display: none;
+            max-width: min(280px, 70vw);
+            padding: 12px 16px;
+            color: #fff4d4;
+            background: rgba(34, 8, 42, 0.88);
+            border: 1px solid rgba(255, 220, 160, 0.8);
+            border-radius: 14px;
+            box-shadow: 0 0 24px rgba(193, 97, 255, 0.45);
+            font-size: 0.95rem;
+            line-height: 1.45;
+            text-align: center;
+            text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+            transform: translate(-50%, -110%);
+            pointer-events: none;
+            z-index: 15;
+        }
+
+        #image-viewer {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(7, 0, 12, 0.82);
+            backdrop-filter: blur(8px);
+            pointer-events: auto;
+            z-index: 30;
+        }
+
+        #image-viewer.is-open {
+            display: flex;
+        }
+
+        #image-viewer-content {
+            position: relative;
+            width: min(520px, 88vw);
+            padding: 14px;
+            border: 1px solid rgba(220, 170, 255, 0.8);
+            border-radius: 20px;
+            background: linear-gradient(145deg, rgba(42, 12, 54, 0.98), rgba(12, 0, 22, 0.98));
+            box-shadow: 0 0 45px rgba(157, 40, 255, 0.4);
+            text-align: center;
+        }
+
+        #image-viewer-image {
+            display: block;
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: contain;
+            border-radius: 12px;
+        }
+
+        #image-viewer-wish {
+            margin: 14px 42px 6px;
+            color: #fff4d4;
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        #image-viewer-close {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: 40px;
+            height: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            color: #fff;
+            background: rgba(20, 4, 28, 0.85);
+            font-size: 1.4rem;
+            cursor: pointer;
+        }
+
+        @media (max-width: 600px) {
+            #status {
+                top: 12px;
+                left: 12px;
+                max-width: 42vw;
+                font-size: 0.72rem;
+            }
+
+            #camera-frame {
+                top: 12px;
+                right: 12px;
+                width: min(150px, 34vw);
+                border-radius: 10px;
+            }
+
+        }
+    </style>
+
+    <!-- Load MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- Import Map for Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <script>
+        // Anti-tampering logic to prevent viewing source code easily
+        document.addEventListener('contextmenu', event => event.preventDefault()); // Block right-click
+        document.addEventListener('keydown', event => {
+            // Block F12
+            if (event.keyCode === 123) event.preventDefault();
+            // Block Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+            if (event.ctrlKey && event.shiftKey && (event.keyCode === 73 || event.keyCode === 74 || event.keyCode === 67)) {
+                event.preventDefault();
+            }
+            // Block Ctrl+U
+            if (event.ctrlKey && event.keyCode === 85) event.preventDefault();
+        });
+    </script>
+
+    <div id="canvas-container"></div>
+    <div id="camera-frame" aria-label="Live camera preview">
+        <video class="input_video" autoplay playsinline muted></video>
+        <div id="camera-label">Camera · Hand tracking</div>
+    </div>
+    
+    <div id="ui-layer">
+        <div id="status">Loading AI Model & Camera...</div>
+        <div id="wish-popup" role="status" aria-live="polite"></div>
+        <div id="image-viewer" role="dialog" aria-modal="true" aria-label="Ảnh và lời chúc">
+            <div id="image-viewer-content">
+                <button id="image-viewer-close" type="button" aria-label="Đóng ảnh">&times;</button>
+                <img id="image-viewer-image" alt="Ảnh lời chúc">
+                <div id="image-viewer-wish"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // Globals for animation state
+        let currentExplodeProgress = 0; // 0 = Core, 1 = Exploded
+        let targetExplodeProgress = 0;
+        let isHandDetected = false;
+        let targetHandRotationX = 0;
+        let targetHandRotationY = 0;
+        let handRotationX = 0;
+        let handRotationY = 0;
+
+        // Scene Setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x10000d, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 20, 50);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 5;
+        controls.maxDistance = 150;
+
+        // Master Group to rotate everything together
+        const masterGroup = new THREE.Group();
+        scene.add(masterGroup);
+
+        // 1. GALAXY PARTICLES (Custom Shader Material for Interpolation)
+        const galaxyParticleCount = 80000; // Increased slightly for a denser look
+        const galaxyGeometry = new THREE.BufferGeometry();
+        
+        const positions = new Float32Array(galaxyParticleCount * 3);
+        const explodedPositions = new Float32Array(galaxyParticleCount * 3);
+        const colors = new Float32Array(galaxyParticleCount * 3);
+
+        const colorInside = new THREE.Color('#ffe7a3');
+        const colorMiddle = new THREE.Color('#f0a0ff');
+        const colorOutside = new THREE.Color('#a440ff');
+
+        for (let i = 0; i < galaxyParticleCount; i++) {
+            const i3 = i * 3;
+
+            // Generate Original Position (Dense sphere/disk)
+            const isCore = i < galaxyParticleCount * 0.45;
+            let ox, oy, oz;
+
+            if (isCore) {
+                // Sphere Core - perfectly round and dense
+                const radius = 6 * Math.pow(Math.random(), 0.5); 
+                const theta = Math.random() * 2 * Math.PI;
+                const phi = Math.acos(2 * Math.random() - 1);
+                ox = radius * Math.sin(phi) * Math.cos(theta);
+                oy = radius * Math.sin(phi) * Math.sin(theta);
+                oz = radius * Math.cos(phi);
+            } else {
+                // Outer Disk - spreading out from the core
+                const radius = 4 + 22 * Math.pow(Math.random(), 0.7); 
+                const angle = Math.random() * Math.PI * 2;
+                ox = Math.cos(angle) * radius;
+                oz = Math.sin(angle) * radius;
+                
+                // Thicker near the center, tapering off towards edges
+                const thickness = Math.max(0.5, 3.0 - (radius / 25) * 2.5);
+                oy = (Math.random() - 0.5) * thickness; 
+            }
+
+            positions[i3] = ox;
+            positions[i3 + 1] = oy;
+            positions[i3 + 2] = oz;
+
+            // Generate Exploded Position (Scattered widely outward)
+            const explodeRadius = 60 + Math.random() * 100;
+            const exTheta = Math.random() * 2 * Math.PI;
+            const exPhi = Math.acos(2 * Math.random() - 1);
+            
+            explodedPositions[i3] = explodeRadius * Math.sin(exPhi) * Math.cos(exTheta);
+            explodedPositions[i3 + 1] = explodeRadius * Math.sin(exPhi) * Math.sin(exTheta) + (Math.random()-0.5)*30;
+            explodedPositions[i3 + 2] = explodeRadius * Math.cos(exPhi);
+
+            // Keep the equatorial band warm while the poles and outer disk turn violet.
+            const dist = Math.sqrt(ox*ox + oy*oy + oz*oz);
+            const verticalFactor = Math.max(0, Math.min(1, (Math.abs(oy) - 1.2) / 4.8));
+            const radialFactor = Math.max(0, Math.min(1, (dist - 8.0) / 18.0));
+            let colorFactor = Math.max(verticalFactor * 0.92, radialFactor * 0.86);
+            colorFactor += (Math.random() - 0.5) * 0.16;
+            colorFactor = Math.max(0, Math.min(1, colorFactor));
+
+            const mixedColor = new THREE.Color();
+            
+            if (colorFactor < 0.28) {
+                const lerpFactor = colorFactor / 0.28;
+                mixedColor.lerpColors(colorInside, colorMiddle, lerpFactor);
+            } else {
+                const lerpFactor = (colorFactor - 0.28) / 0.72;
+                mixedColor.lerpColors(colorMiddle, colorOutside, lerpFactor);
+            }
+
+            colors[i3] = mixedColor.r;
+            colors[i3 + 1] = mixedColor.g;
+            colors[i3 + 2] = mixedColor.b;
+        }
+
+        galaxyGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        galaxyGeometry.setAttribute('aExplodedPosition', new THREE.BufferAttribute(explodedPositions, 3));
+        galaxyGeometry.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+
+        // Custom Shader Material for Lerping positions
+        const galaxyMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uProgress: { value: 0.0 }, // 0 to 1
+                uSize: { value: 50.0 * renderer.getPixelRatio() }
+            },
+            vertexShader: `
+                uniform float uProgress;
+                uniform float uSize;
+                attribute vec3 aExplodedPosition;
+                attribute vec3 aColor;
+                varying vec3 vColor;
+                
+                // Ease out cubic function for smoother explosion
+                float easeOutCubic(float x) {
+                    return 1.0 - pow(1.0 - x, 3.0);
+                }
+
+                void main() {
+                    vColor = aColor;
+                    float easedProgress = easeOutCubic(uProgress);
+                    vec3 currentPos = mix(position, aExplodedPosition, easedProgress);
+                    vec4 mvPosition = modelViewMatrix * vec4(currentPos, 1.0);
+                    gl_PointSize = uSize * (1.0 / -mvPosition.z);
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vColor;
+                void main() {
+                    // Create soft circular particles
+                    float dist = length(gl_PointCoord - vec2(0.5));
+                    if (dist > 0.5) discard;
+                    float alpha = 1.0 - (dist * 2.0);
+                    gl_FragColor = vec4(vColor, alpha * 0.95);
+                }
+            `,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const galaxyPoints = new THREE.Points(galaxyGeometry, galaxyMaterial);
+        // Tilt for better initial view
+        galaxyPoints.rotation.x = 0.2;
+        galaxyPoints.rotation.z = -0.1;
+        masterGroup.add(galaxyPoints);
+
+        const centerSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(5.8, 48, 32),
+            new THREE.ShaderMaterial({
+                vertexShader: `
+                    varying vec3 vLocalPosition;
+                    void main() {
+                        vLocalPosition = position;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    varying vec3 vLocalPosition;
+                    void main() {
+                        float pole = smoothstep(0.08, 0.72, abs(normalize(vLocalPosition).y));
+                        vec3 gold = vec3(1.0, 0.78, 0.42);
+                        vec3 violet = vec3(0.58, 0.18, 1.0);
+                        vec3 color = mix(gold, violet, pole);
+                        float glow = 0.12 + 0.12 * (1.0 - pole);
+                        gl_FragColor = vec4(color, glow);
+                    }
+                `,
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide
+            })
+        );
+        masterGroup.add(centerSphere);
+
+        // 2. FLOATING IMAGES (31 October 20th photos)
+        const imagesGroup = new THREE.Group();
+        masterGroup.add(imagesGroup);
+
+        const imageMeshes = [];
+        const numImages = 31;
+        const imageFiles = Array.from(
+            { length: numImages },
+            (_, index) => `./assets/20-10/photo-${String(index + 1).padStart(2, '0')}.jpg`
+        );
+        const wishes = [
+            'Chúc bạn 20/10 luôn rạng rỡ và ngập tràn yêu thương!',
+            'Chúc cô gái tuyệt vời có một ngày 20/10 thật vui!',
+            'Mong bạn luôn tự tin, xinh đẹp và tỏa sáng theo cách riêng.',
+            'Chúc bạn nhận được thật nhiều hoa, quà và lời yêu thương.',
+            'Chúc ngày 20/10 của bạn ngọt ngào như chính nụ cười của bạn.',
+            'Mong mọi điều dịu dàng nhất sẽ đến với bạn hôm nay.',
+            'Chúc bạn luôn hạnh phúc, bình an và được trân trọng.',
+            'Chúc cô gái nhỏ luôn mạnh mẽ và chinh phục mọi ước mơ.',
+            'Mong hôm nay và mọi ngày của bạn đều rực rỡ sắc hoa.',
+            'Chúc bạn luôn xinh tươi, yêu đời và gặp nhiều may mắn.',
+            '20/10 vui vẻ nhé! Bạn xứng đáng với những điều tốt đẹp nhất.',
+            'Chúc bạn luôn giữ được năng lượng tích cực và nụ cười thật tươi.',
+            'Mong trái tim bạn luôn đầy ắp niềm vui và sự ấm áp.',
+            'Chúc bạn học tập, làm việc thật tốt và luôn tự hào về mình.',
+            'Chúc cô gái đáng yêu có một ngày 20/10 thật đáng nhớ.',
+            'Mong mọi dự định của bạn đều thuận lợi và sớm thành hiện thực.',
+            'Chúc bạn luôn được yêu thương, lắng nghe và thấu hiểu.',
+            'Chúc ngày Phụ nữ Việt Nam của bạn ngập tràn bất ngờ dễ thương.',
+            'Mong bạn luôn xinh đẹp từ bên ngoài và rạng ngời từ bên trong.',
+            'Chúc bạn đủ bản lĩnh để tỏa sáng và đủ dịu dàng để yêu thương.',
+            '20/10 thật vui nhé! Chúc bạn luôn gặp những người tử tế.',
+            'Mong mỗi ngày của bạn đều có một lý do để mỉm cười.',
+            'Chúc bạn luôn khỏe mạnh, bình an và làm điều mình yêu thích.',
+            'Gửi bạn một bó hoa lời chúc: luôn vui vẻ và gặp nhiều điều lành.',
+            'Chúc cô gái tuyệt vời luôn được nâng niu như đóa hoa xinh.',
+            'Mong bạn luôn tin vào bản thân và tự hào về hành trình của mình.',
+            'Chúc 20/10 của bạn thật ấm áp bên những người thương yêu.',
+            'Bạn đặc biệt theo cách riêng. Chúc bạn luôn tỏa sáng nhé!',
+            'Chúc bạn có thật nhiều kỷ niệm đẹp trong ngày 20/10.',
+            'Mong niềm vui hôm nay sẽ theo bạn suốt cả năm dài.',
+            'Chúc bạn một ngày 20/10 ngọt ngào, hạnh phúc và tràn đầy yêu thương!'
+        ];
+        const wishPopup = document.getElementById('wish-popup');
+        const imageViewer = document.getElementById('image-viewer');
+        const imageViewerImage = document.getElementById('image-viewer-image');
+        const imageViewerWish = document.getElementById('image-viewer-wish');
+        const closeImageViewerButton = document.getElementById('image-viewer-close');
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        const pointerDownPosition = new THREE.Vector2();
+        let selectedImage = null;
+        
+        const photoTextureLoader = new THREE.TextureLoader();
+
+        function drawPhotoCard(image, index) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            const cropSize = Math.min(image.naturalWidth, image.naturalHeight);
+            const cropX = (image.naturalWidth - cropSize) / 2;
+            const cropY = (image.naturalHeight - cropSize) / 2;
+            ctx.drawImage(image, cropX, cropY, cropSize, cropSize, 0, 0, 512, 512);
+
+            const gradient = ctx.createLinearGradient(0, 300, 0, 512);
+            gradient.addColorStop(0, 'rgba(15, 3, 24, 0)');
+            gradient.addColorStop(0.32, 'rgba(15, 3, 24, 0.78)');
+            gradient.addColorStop(1, 'rgba(15, 3, 24, 0.94)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 292, 512, 220);
+
+            ctx.fillStyle = '#fff4d4';
+            ctx.font = 'bold 38px Inter, Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`20/10 · ${index + 1}`, 256, 345);
+            ctx.font = 'bold 25px Inter, Arial';
+            ctx.fillStyle = '#ffffff';
+            const wishWords = wishes[index].split(' ');
+            const wishLines = [];
+            let wishLine = '';
+            wishWords.forEach(word => {
+                const candidate = wishLine ? `${wishLine} ${word}` : word;
+                if (ctx.measureText(candidate).width > 450 && wishLine) {
+                    wishLines.push(wishLine);
+                    wishLine = word;
+                } else {
+                    wishLine = candidate;
+                }
+            });
+            if (wishLine) wishLines.push(wishLine);
+            wishLines.slice(0, 3).forEach((line, lineIndex) => {
+                ctx.fillText(line, 256, 397 + lineIndex * 34);
+            });
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 12;
+            ctx.strokeRect(6, 6, 500, 500);
+            return canvas;
+        }
+
+        for (let i = 0; i < numImages; i++) {
+            const photoUrl = imageFiles[i];
+            const tex = new THREE.Texture();
+            tex.colorSpace = THREE.SRGBColorSpace;
+            const mat = new THREE.MeshBasicMaterial({
+                map: tex,
+                transparent: true,
+                opacity: 0.0, // Start hidden
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const geo = new THREE.PlaneGeometry(5.2, 5.2);
+            const mesh = new THREE.Mesh(geo, mat);
+
+            // Place every frame around one flat ring around the center sphere.
+            const theta = (i / numImages) * Math.PI * 2;
+            const r = 31;
+
+            mesh.position.set(
+                r * Math.cos(theta),
+                0,
+                r * Math.sin(theta)
+            );
+
+            // Make images face outwards roughly
+            mesh.lookAt(0,0,0);
+            
+            // Store a stable orbit position and subtle per-frame motion.
+            mesh.userData = {
+                basePosition: mesh.position.clone(),
+                animOffset: Math.random() * Math.PI * 2,
+                bobAmplitude: 0.35 + Math.random() * 0.25,
+                spinSpeed: (0.04 + Math.random() * 0.06) * (Math.random() < 0.5 ? -1 : 1),
+                wish: wishes[i],
+                imageUrl: photoUrl
+            };
+
+            imagesGroup.add(mesh);
+            imageMeshes.push(mesh);
+
+            photoTextureLoader.load(
+                photoUrl,
+                loadedTexture => {
+                    tex.image = drawPhotoCard(loadedTexture.image, i);
+                    tex.needsUpdate = true;
+                    loadedTexture.dispose();
+                },
+                undefined,
+                error => {
+                    console.error(`Failed to load photo ${i + 1}: ${photoUrl}`, error);
+                    statusElement.textContent = `Could not load photo ${i + 1}. Check assets/20-10.`;
+                }
+            );
+        }
+
+        renderer.domElement.addEventListener('pointerdown', event => {
+            pointerDownPosition.set(event.clientX, event.clientY);
+        });
+
+        renderer.domElement.addEventListener('pointerup', event => {
+            if (pointerDownPosition.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 8) {
+                return;
+            }
+
+            pointer.set(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1
+            );
+            raycaster.setFromCamera(pointer, camera);
+            const visibleImages = imageMeshes.filter(mesh => mesh.material.opacity > 0.1);
+            const [hit] = raycaster.intersectObjects(visibleImages);
+            selectedImage = hit ? hit.object : null;
+            if (selectedImage) {
+                imageViewerImage.src = selectedImage.userData.imageUrl;
+                imageViewerWish.textContent = selectedImage.userData.wish;
+                imageViewer.classList.add('is-open');
+                wishPopup.style.display = 'none';
+            }
+        });
+
+        function closeImageViewer() {
+            imageViewer.classList.remove('is-open');
+            imageViewerImage.removeAttribute('src');
+            selectedImage = null;
+        }
+
+        closeImageViewerButton.addEventListener('click', closeImageViewer);
+        imageViewer.addEventListener('click', event => {
+            if (event.target === imageViewer) closeImageViewer();
+        });
+        window.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && imageViewer.classList.contains('is-open')) {
+                closeImageViewer();
+            }
+        });
+
+        // 3. FALLING DUST (Covers screen, falls down, rotates)
+        const dustCount = 3000;
+        const dustGeo = new THREE.BufferGeometry();
+        const dustPos = new Float32Array(dustCount * 3);
+        const dustVelocities = [];
+
+        const boxSize = 100;
+        for (let i = 0; i < dustCount; i++) {
+            dustPos[i*3] = (Math.random() - 0.5) * boxSize;
+            dustPos[i*3+1] = (Math.random() - 0.5) * boxSize;
+            dustPos[i*3+2] = (Math.random() - 0.5) * boxSize;
+            dustVelocities.push(0.05 + Math.random() * 0.1); // Fall speed
+        }
+
+        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+        
+        // Circular dust texture
+        const dCanvas = document.createElement('canvas');
+        dCanvas.width = 16; dCanvas.height = 16;
+        const dCtx = dCanvas.getContext('2d');
+        const dGrad = dCtx.createRadialGradient(8, 8, 0, 8, 8, 8);
+        dGrad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+        dGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        dCtx.fillStyle = dGrad;
+        dCtx.fillRect(0, 0, 16, 16);
+        const dustTex = new THREE.CanvasTexture(dCanvas);
+
+        const dustMat = new THREE.PointsMaterial({
+            color: 0x88aaff,
+            size: 0.5,
+            transparent: true,
+            opacity: 0.4,
+            map: dustTex,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+
+        const dustSystem = new THREE.Points(dustGeo, dustMat);
+        masterGroup.add(dustSystem);
+
+        const orbitDustCount = 2400;
+        const orbitDustGeometry = new THREE.BufferGeometry();
+        const orbitDustPositions = new Float32Array(orbitDustCount * 3);
+        const orbitDustAngles = new Float32Array(orbitDustCount);
+        const orbitDustRadii = new Float32Array(orbitDustCount);
+        const orbitDustHeights = new Float32Array(orbitDustCount);
+        for (let i = 0; i < orbitDustCount; i++) {
+            const i3 = i * 3;
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 31 + (Math.random() - 0.5) * 8;
+            orbitDustAngles[i] = angle;
+            orbitDustRadii[i] = radius;
+            orbitDustHeights[i] = (Math.random() - 0.5) * 7;
+            orbitDustPositions[i3] = Math.cos(angle) * radius;
+            orbitDustPositions[i3 + 1] = orbitDustHeights[i];
+            orbitDustPositions[i3 + 2] = Math.sin(angle) * radius;
+        }
+        orbitDustGeometry.setAttribute('position', new THREE.BufferAttribute(orbitDustPositions, 3));
+        const orbitDustMaterial = new THREE.PointsMaterial({
+            color: 0xc890ff,
+            size: 0.42,
+            transparent: true,
+            opacity: 0.22,
+            map: dustTex,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+        const orbitDust = new THREE.Points(orbitDustGeometry, orbitDustMaterial);
+        imagesGroup.add(orbitDust);
+
+        const innerDustCount = 18000;
+        const innerDustGeometry = new THREE.BufferGeometry();
+        const innerDustPositions = new Float32Array(innerDustCount * 3);
+        const innerDustColors = new Float32Array(innerDustCount * 3);
+        const innerDustAngles = new Float32Array(innerDustCount);
+        const innerDustRadii = new Float32Array(innerDustCount);
+        const innerDustHeights = new Float32Array(innerDustCount);
+        const innerDustPhases = new Float32Array(innerDustCount);
+        const warmDustColor = new THREE.Color('#ffd889');
+        const violetDustColor = new THREE.Color('#a64dff');
+        const pinkDustColor = new THREE.Color('#ed8cff');
+
+        for (let i = 0; i < innerDustCount; i++) {
+            const i3 = i * 3;
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.sqrt(Math.random()) * 29;
+            const height = (Math.random() - 0.5) * 4.5;
+            const phase = Math.random() * Math.PI * 2;
+            const color = new THREE.Color();
+            const radialMix = THREE.MathUtils.clamp((radius - 7) / 22, 0, 1);
+            color.copy(warmDustColor).lerp(pinkDustColor, radialMix * 0.45);
+            color.lerp(violetDustColor, radialMix * 0.8);
+            color.multiplyScalar(0.72 + Math.random() * 0.55);
+
+            innerDustAngles[i] = angle;
+            innerDustRadii[i] = radius;
+            innerDustHeights[i] = height;
+            innerDustPhases[i] = phase;
+            innerDustPositions[i3] = Math.cos(angle) * radius;
+            innerDustPositions[i3 + 1] = height;
+            innerDustPositions[i3 + 2] = Math.sin(angle) * radius;
+            innerDustColors[i3] = color.r;
+            innerDustColors[i3 + 1] = color.g;
+            innerDustColors[i3 + 2] = color.b;
+        }
+
+        innerDustGeometry.setAttribute('position', new THREE.BufferAttribute(innerDustPositions, 3));
+        innerDustGeometry.setAttribute('color', new THREE.BufferAttribute(innerDustColors, 3));
+        const innerDustMaterial = new THREE.PointsMaterial({
+            size: 0.38,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.2,
+            map: dustTex,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+        const innerDust = new THREE.Points(innerDustGeometry, innerDustMaterial);
+        imagesGroup.add(innerDust);
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            galaxyMaterial.uniforms.uSize.value = 50.0 * renderer.getPixelRatio();
+        });
+
+        // 4. MEDIAPIPE HAND TRACKING
+        const videoElement = document.getElementsByClassName('input_video')[0];
+        const statusElement = document.getElementById('status');
+
+        function onResults(results) {
+            if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+                // No hand detected
+                isHandDetected = false;
+                statusElement.innerText = "No hand detected. Position held.";
+                statusElement.style.background = "rgba(0, 0, 0, 0.6)";
+                return;
+            }
+
+            isHandDetected = true;
+            const landmarks = results.multiHandLandmarks[0]; // Take first hand
+            const palmCenter = landmarks[9];
+            const mirroredHandX = 1 - palmCenter.x;
+            targetHandRotationY = THREE.MathUtils.clamp((mirroredHandX - 0.5) * 1.8, -0.8, 0.8);
+            targetHandRotationX = THREE.MathUtils.clamp((0.5 - palmCenter.y) * 1.4, -0.65, 0.65);
+
+            // Logic to detect if hand is closed (fist) or open
+            // We calculate distance from wrist (0) to fingertips (8, 12, 16, 20)
+            const wrist = landmarks[0];
+            const tips = [8, 12, 16, 20];
+            let avgDist = 0;
+
+            tips.forEach(tipIndex => {
+                const tip = landmarks[tipIndex];
+                const dx = tip.x - wrist.x;
+                const dy = tip.y - wrist.y;
+                const dz = tip.z - wrist.z;
+                avgDist += Math.sqrt(dx*dx + dy*dy + dz*dz);
+            });
+            avgDist /= tips.length;
+
+            // Threshold for open vs closed. 
+            // Usually, when open, distance is > 0.4. When closed, it's < 0.2.
+            const threshold = 0.3;
+
+            if (avgDist > threshold) {
+                // Hand is OPEN -> Explode & Show Images
+                targetExplodeProgress = 1.0;
+                statusElement.innerText = "Hand OPEN (Exploding)";
+                statusElement.style.background = "rgba(0, 150, 50, 0.6)";
+            } else {
+                // Hand is CLOSED -> Implode & Hide Images
+                targetExplodeProgress = 0.0;
+                statusElement.innerText = "Hand CLOSED (Imploding)";
+                statusElement.style.background = "rgba(200, 50, 0, 0.6)";
+            }
+        }
+
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+        
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        
+        hands.onResults(onResults);
+
+        const cameraFeed = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        
+        cameraFeed.start().then(() => {
+            statusElement.innerText = "Camera Started. Waiting for hand...";
+            setTimeout(() => {
+                statusElement.style.opacity = '0.7'; // fade slightly out of way
+            }, 2000);
+        }).catch(err => {
+            statusElement.innerText = "Camera access denied or failed.";
+            console.error(err);
+        });
+
+        // 5. ANIMATION LOOP
+        const clock = new THREE.Clock();
+
+        function tick() {
+            const delta = clock.getDelta();
+            const time = clock.elapsedTime;
+
+            // Gather particles quickly while keeping the inward motion visible.
+            if (targetExplodeProgress < currentExplodeProgress) {
+                currentExplodeProgress += (targetExplodeProgress - currentExplodeProgress) * 0.18;
+            } else {
+                currentExplodeProgress += (targetExplodeProgress - currentExplodeProgress) * 0.05;
+            }
+            
+            // Update Galaxy Shader
+            galaxyMaterial.uniforms.uProgress.value = currentExplodeProgress;
+            innerDustMaterial.size = 0.38 + currentExplodeProgress * 0.47;
+            innerDustMaterial.opacity = 0.2 + currentExplodeProgress * 0.48;
+            orbitDustMaterial.size = 0.42 + currentExplodeProgress * 0.23;
+            orbitDustMaterial.opacity = 0.22 + currentExplodeProgress * 0.48;
+
+            // Update Images (Opacity, gentle bobbing, and slow rotation)
+            imageMeshes.forEach(mesh => {
+                mesh.material.opacity = currentExplodeProgress;
+                const { basePosition, animOffset, bobAmplitude, spinSpeed } = mesh.userData;
+                const bob = Math.sin(time * 1.2 + animOffset) * bobAmplitude;
+                mesh.position.set(
+                    basePosition.x + Math.sin(time * 0.8 + animOffset) * 0.2,
+                    basePosition.y + bob,
+                    basePosition.z + Math.cos(time * 0.8 + animOffset) * 0.2
+                );
+                mesh.lookAt(camera.position);
+                mesh.rotateZ(spinSpeed * delta);
+            });
+            imagesGroup.rotation.y = time * 0.035;
+            if (currentExplodeProgress < 0.05 && selectedImage) {
+                selectedImage = null;
+                wishPopup.style.display = 'none';
+            }
+            if (selectedImage && !imageViewer.classList.contains('is-open')) {
+                const screenPosition = selectedImage.getWorldPosition(new THREE.Vector3()).project(camera);
+                const isVisible = screenPosition.z > -1 && screenPosition.z < 1
+                    && Math.abs(screenPosition.x) < 1.15
+                    && Math.abs(screenPosition.y) < 1.15;
+                wishPopup.style.display = isVisible ? 'block' : 'none';
+                if (isVisible) {
+                    wishPopup.style.left = `${(screenPosition.x * 0.5 + 0.5) * window.innerWidth}px`;
+                    wishPopup.style.top = `${(-screenPosition.y * 0.5 + 0.5) * window.innerHeight}px`;
+                }
+            } else {
+                wishPopup.style.display = 'none';
+            }
+
+            // Update Dust (Falling)
+            const positions = dustSystem.geometry.attributes.position.array;
+            for (let i = 0; i < dustCount; i++) {
+                positions[i*3 + 1] -= dustVelocities[i]; // move y down
+                
+                // If it falls below box, reset to top
+                if (positions[i*3 + 1] < -boxSize / 2) {
+                    positions[i*3 + 1] = boxSize / 2;
+                }
+            }
+            dustSystem.geometry.attributes.position.needsUpdate = true;
+
+            const orbitPositions = orbitDustGeometry.attributes.position.array;
+            for (let i = 0; i < orbitDustCount; i++) {
+                const i3 = i * 3;
+                const angle = orbitDustAngles[i] + time * 0.018;
+                const radius = orbitDustRadii[i] + Math.sin(time * 1.1 + orbitDustAngles[i]) * 0.25;
+                orbitPositions[i3] = Math.cos(angle) * radius;
+                orbitPositions[i3 + 1] = orbitDustHeights[i] + Math.sin(time * 1.4 + orbitDustAngles[i]) * 0.35;
+                orbitPositions[i3 + 2] = Math.sin(angle) * radius;
+            }
+            orbitDustGeometry.attributes.position.needsUpdate = true;
+
+            const innerPositions = innerDustGeometry.attributes.position.array;
+            for (let i = 0; i < innerDustCount; i++) {
+                const i3 = i * 3;
+                const angle = innerDustAngles[i] + time * (0.012 + innerDustPhases[i] * 0.0005);
+                const radius = innerDustRadii[i] + Math.sin(time * 0.6 + innerDustPhases[i]) * 0.18;
+                innerPositions[i3] = Math.cos(angle) * radius;
+                innerPositions[i3 + 1] = innerDustHeights[i] + Math.sin(time * 0.9 + innerDustPhases[i]) * 0.25;
+                innerPositions[i3 + 2] = Math.sin(angle) * radius;
+            }
+            innerDustGeometry.attributes.position.needsUpdate = true;
+
+            // Smoothly follow hand position for horizontal and vertical rotation.
+            handRotationX += (targetHandRotationX - handRotationX) * 0.08;
+            handRotationY += (targetHandRotationY - handRotationY) * 0.08;
+            masterGroup.rotation.x = handRotationX;
+            masterGroup.rotation.y = time * 0.05 + handRotationY;
+            galaxyPoints.rotation.y = time * -0.02; // Galaxy core counter-rotates slightly
+            
+            controls.update();
+            renderer.render(scene, camera);
+            requestAnimationFrame(tick);
+        }
+
+        // Start
+        tick();
+
+    </script>
+</body>
+</html>
